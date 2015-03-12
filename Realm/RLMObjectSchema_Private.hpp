@@ -17,6 +17,10 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #import "RLMObjectSchema_Private.h"
+#import "RLMObject_Private.hpp"
+
+#import <realm/row.hpp>
+#import <vector>
 
 namespace realm {
     class Table;
@@ -24,9 +28,21 @@ namespace realm {
     typedef BasicTableRef<Table> TableRef;
 }
 
-// RLMObjectSchema private
-@interface RLMObjectSchema ()
+@class RLMObservable;
 
+// RLMObjectSchema private
+@interface RLMObjectSchema () {
+    @public
+    std::vector<__unsafe_unretained RLMObservable *> _observers;
+
+    struct RLMBackLink {
+        __unsafe_unretained RLMObservable *observable;
+        NSString *propertyName;
+        NSUInteger column;
+        int refCount = 1;
+    };
+    std::vector<RLMBackLink> _observedBacklinks;
+}
 @property (nonatomic) realm::Table *table;
 
 // shallow copy reusing properties and property map

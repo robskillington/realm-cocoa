@@ -356,9 +356,12 @@ void RLMInitializeSwiftListAccessor(RLMObjectBase *object) {
 
     for (RLMProperty *prop in object->_objectSchema.properties) {
         if (prop.type == RLMPropertyTypeArray) {
-            [RLMObjectUtilClass(YES) initializeListProperty:object property:prop array:[RLMArrayLinkView arrayWithObjectClassName:prop.objectClassName
-                                                                                                                             view:object->_row.get_linklist(prop.column)
-                                                                                                                            realm:object->_realm]];
+            [RLMObjectUtilClass(YES) initializeListProperty:object property:prop
+                                                      array:[RLMArrayLinkView arrayWithObjectClassName:prop.objectClassName
+                                                                                                  view:object->_row.get_linklist(prop.column)
+                                                                                                 realm:object->_realm
+                                                                                                 parentObject:object
+                                                                                                   key:prop.name]];
         }
     }
 }
@@ -424,6 +427,15 @@ void RLMAddObjectToRealm(RLMObjectBase *object, RLMRealm *realm, RLMCreationOpti
     auto primaryGetter = [=](RLMProperty *p) { return [object valueForKey:p.getterName]; };
     object->_row = (*schema.table)[RLMCreateOrGetRowForObject(schema, primaryGetter, options, created)];
 
+    // unregister all observers of the standalone object
+    // has to be done before any linked standalone objects are added
+    NSMutableArray *observers = object->_standaloneObservers;
+    object->_standaloneObservers = nil;
+
+    for (RLMObservationInfo *info in observers) {
+        [object removeObserver:info.observer forKeyPath:info.key context:info.context];
+    }
+
     // populate all properties
     for (RLMProperty *prop in schema.properties) {
         // get object from ivar using key value coding
@@ -461,6 +473,14 @@ void RLMAddObjectToRealm(RLMObjectBase *object, RLMRealm *realm, RLMCreationOpti
 
     // set to proper accessor class
     object_setClass(object, schema.accessorClass);
+
+    // re-add the observers
+    for (RLMObservationInfo *info in observers) {
+        [object addObserver:info.observer
+                 forKeyPath:info.key
+                    options:info.options & ~NSKeyValueObservingOptionInitial
+                    context:info.context];
+    }
 
     RLMInitializeSwiftListAccessor(object);
 }
@@ -536,11 +556,58 @@ void RLMDeleteObjectFromRealm(RLMObjectBase *object, RLMRealm *realm) {
 
     // move last row to row we are deleting
     if (object->_row.is_attached()) {
-        object->_row.get_table()->move_last_over(object->_row.get_index());
+        RLMInvalidateObject(object, ^{
+            object->_row.get_table()->move_last_over(object->_row.get_index());
+        });
     }
 
     // set realm to nil
     object->_realm = nil;
+}
+
+void RLMClearTable(RLMObjectSchema *objectSchema) {
+    struct backlink {
+        id observable;
+        NSString *property;
+        NSIndexSet *indexes;
+    };
+    std::vector<backlink> backlinks;
+    for (auto& bl : objectSchema->_observedBacklinks) {
+        auto table = bl.observable->_row.get_table();
+        if (table->get_column_type(bl.column) == realm::type_Link) {
+            if (bl.observable->_row.get_link(bl.column) != realm::npos) {
+                [bl.observable willChangeValueForKey:bl.propertyName];
+                backlinks.push_back({bl.observable, bl.propertyName, nil});
+            }
+        }
+        else {
+            auto list = bl.observable->_row.get_linklist(bl.column);
+            if (list->size() > 0) {
+                auto indexes = [NSIndexSet indexSetWithIndexesInRange:{0, list->size()}];
+                [bl.observable willChange:NSKeyValueChangeRemoval valuesAtIndexes:indexes forKey:bl.propertyName];
+                backlinks.push_back({bl.observable, bl.propertyName, indexes});
+            }
+        }
+    }
+
+    for (__unsafe_unretained RLMObservable *observable : objectSchema->_observers) {
+        [observable willChangeValueForKey:@"invalidated"];
+    }
+    objectSchema.table->clear();
+    for (__unsafe_unretained RLMObservable *observable : objectSchema->_observers) {
+        [observable didChangeValueForKey:@"invalidated"];
+    }
+
+    for (auto& bl : backlinks) {
+        if (bl.indexes) {
+            [bl.observable didChange:NSKeyValueChangeRemoval valuesAtIndexes:bl.indexes forKey:bl.property];
+        }
+        else {
+            [bl.observable didChangeValueForKey:bl.property];
+        }
+    }
+
+    objectSchema->_observers.clear();
 }
 
 void RLMDeleteAllObjectsFromRealm(RLMRealm *realm) {
@@ -548,7 +615,7 @@ void RLMDeleteAllObjectsFromRealm(RLMRealm *realm) {
 
     // clear table for each object schema
     for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
-        objectSchema.table->clear();
+        RLMClearTable(objectSchema);
     }
 }
 

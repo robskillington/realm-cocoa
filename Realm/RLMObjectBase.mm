@@ -19,18 +19,55 @@
 #import "RLMObject_Private.hpp"
 
 #import "RLMAccessor.h"
+#import "RLMArray.h"
 #import "RLMObjectSchema_Private.hpp"
+#import "RLMObjectStore.h"
 #import "RLMProperty_Private.h"
 #import "RLMRealm_Private.hpp"
 #import "RLMSchema_Private.h"
-
-#import "RLMObjectStore.h"
 #import "RLMSwiftSupport.h"
 #import "RLMUtil.hpp"
 
+@implementation RLMObservable {
+    RLMRealm *_realm;
+    RLMObjectSchema *_objectSchema;
+}
+- (instancetype)initWithRow:(realm::Row const&)row realm:(RLMRealm *)realm schema:(RLMObjectSchema *)objectSchema {
+    self = [super init];
+    if (self) {
+        _row = row;
+        _realm = realm;
+        _objectSchema = objectSchema;
+    }
+    return self;
+}
+
+- (id)valueForKey:(NSString *)key {
+    if ([key isEqualToString:@"invalidated"]) {
+        return @(!_row.is_attached());
+    }
+
+    return RLMDynamicGet(_realm, _row, _objectSchema[key]);
+}
+
+- (void)dealloc {
+    auto &observers = _objectSchema->_observers;
+    for (auto it = observers.begin(), end = observers.end(); it != end; ++it) {
+        if (*it == self) {
+            iter_swap(it, prev(end));
+            observers.pop_back();
+            return;
+        }
+    }
+}
+@end
+
 const NSUInteger RLMDescriptionMaxDepth = 5;
 
-@implementation RLMObjectBase
+@implementation RLMObjectBase {
+    @public
+    RLMObservable *_observable;
+}
 
 // standalone init
 - (instancetype)init {
@@ -191,9 +228,145 @@ const NSUInteger RLMDescriptionMaxDepth = 5;
     return RLMIsObjectSubclass(self);
 }
 
+- (id)mutableArrayValueForKey:(NSString *)key {
+    id obj = [self valueForKey:key];
+    if ([obj isKindOfClass:[RLMArray class]]) {
+        return obj;
+    }
+    return [super mutableArrayValueForKey:key];
+}
+
+static NSString *propertyKeyPath(NSString *keyPath, RLMObjectSchema *objectSchema) {
+    if ([keyPath isEqualToString:@"invalidated"])
+        return keyPath;
+
+    NSUInteger sep = [keyPath rangeOfString:@"."].location;
+    NSString *key = sep == NSNotFound ? keyPath : [keyPath substringToIndex:sep];
+    RLMProperty *prop = objectSchema[key];
+    if (!prop)
+        return nil;
+    if (prop.type != RLMPropertyTypeArray)
+        return keyPath;
+    if (sep != NSNotFound && [[keyPath substringFromIndex:sep + 1] isEqualToString:@"invalidated"])
+        return @"invalidated";
+    return keyPath;
+}
+
+static RLMObservable *getObservable(RLMObjectBase *obj) {
+    if (obj->_observable) {
+        return obj->_observable;
+    }
+
+    for (__unsafe_unretained RLMObservable *o : obj->_objectSchema->_observers) {
+        if (o->_row.get_index() == obj->_row.get_index()) {
+            obj->_observable = o;
+            return o;
+        }
+    }
+
+    RLMObservable *observable = [[RLMObservable alloc] initWithRow:obj->_row realm:obj->_realm schema:obj->_objectSchema];
+    obj->_objectSchema->_observers.push_back(observable);
+    obj->_observable = observable;
+    return observable;
+}
+
+static void registerBacklinkObserver(RLMObjectBase *obj, RLMObservable *observable, NSString *key) {
+    RLMProperty *prop = obj->_objectSchema[key];
+    if (!prop)
+        return;
+    if (prop.type != RLMPropertyTypeArray && prop.type != RLMPropertyTypeObject)
+        return;
+
+    RLMObjectSchema *dest = obj->_realm.schema[prop.objectClassName];
+    for (auto& backlink : dest->_observedBacklinks) {
+        if (backlink.observable == observable) {
+            ++backlink.refCount;
+            return;
+        }
+    }
+
+    dest->_observedBacklinks.push_back({observable, prop.name, prop.column});
+}
+
+static void unregisterBacklinkObserver(RLMObjectBase *obj, RLMObservable *observable, NSString *key) {
+    RLMProperty *prop = obj->_objectSchema[key];
+    if (!prop)
+        return;
+    if (prop.type != RLMPropertyTypeArray && prop.type != RLMPropertyTypeObject)
+        return;
+
+    RLMObjectSchema *dest = obj->_objectSchema.realm.schema[prop.objectClassName];
+    for (auto it = dest->_observedBacklinks.begin(), end = dest->_observedBacklinks.end(); it != end; ++it) {
+        if (it->observable == observable) {
+            --it->refCount;
+            if (it->refCount == 0) {
+                iter_swap(it, prev(dest->_observedBacklinks.end()));
+                dest->_observedBacklinks.pop_back();
+            }
+            return;
+        }
+    }
+}
+
+- (void)addObserver:(id)observer
+         forKeyPath:(NSString *)keyPath
+            options:(NSKeyValueObservingOptions)options
+            context:(void *)context {
+    NSString *key = propertyKeyPath(keyPath, _objectSchema);
+    if (!key) {
+        [super addObserver:observer forKeyPath:keyPath options:options context:context];
+        return;
+    }
+
+    RLMObservable *observable = getObservable(self);
+    registerBacklinkObserver(self, observable, key);
+    [observable addObserver:observer forKeyPath:key options:options context:context];
+}
+
+- (void)removeObserver:(NSObject *)observer forKeyPath:(NSString *)keyPath {
+    NSString *key = propertyKeyPath(keyPath, _objectSchema);
+    if (key) {
+        RLMObservable *observable = getObservable(self);
+        unregisterBacklinkObserver(self, observable, key);
+        [observable removeObserver:observer forKeyPath:key];
+    }
+    else {
+        [super removeObserver:observer forKeyPath:keyPath];
+    }
+}
+
+- (void)removeObserver:(NSObject *)observer forKeyPath:(NSString *)keyPath context:(void *)context {
+    NSString *key = propertyKeyPath(keyPath, _objectSchema);
+    if (key) {
+        RLMObservable *observable = getObservable(self);
+        unregisterBacklinkObserver(self, observable, key);
+        [observable removeObserver:observer forKeyPath:key context:context];
+    }
+    else {
+        [super removeObserver:observer forKeyPath:keyPath context:context];
+    }
+}
+
 @end
 
+void RLMWillChange(RLMObjectBase *obj, NSString *key) {
+    [getObservable(obj) willChangeValueForKey:key];
+}
 
+void RLMDidChange(RLMObjectBase *obj, NSString *key) {
+    [getObservable(obj) didChangeValueForKey:key];
+}
+
+void RLMWillChange(RLMObjectBase *obj, NSString *key, NSKeyValueChange kind, NSIndexSet *indices) {
+    [getObservable(obj) willChange:kind valuesAtIndexes:indices forKey:key];
+}
+
+void RLMDidChange(RLMObjectBase *obj, NSString *key, NSKeyValueChange kind, NSIndexSet *indices) {
+    [getObservable(obj) didChange:kind valuesAtIndexes:indices forKey:key];
+}
+
+@implementation RLMObservationInfo
+@end
 
 void RLMObjectBaseSetRealm(__unsafe_unretained RLMObjectBase *object, __unsafe_unretained RLMRealm *realm) {
     if (object) {
@@ -335,3 +508,132 @@ Class RLMObjectUtilClass(BOOL isSwift) {
 }
 
 @end
+
+void RLMOverrideStandaloneMethods(Class cls) {
+    struct methodInfo {
+        SEL sel;
+        IMP imp;
+        const char *type;
+    };
+
+    auto make = [](SEL sel, auto&& func) {
+        Method m = class_getInstanceMethod(NSObject.class, sel);
+        IMP superImp = method_getImplementation(m);
+        const char *type = method_getTypeEncoding(m);
+        IMP imp = imp_implementationWithBlock(func(sel, superImp));
+        return methodInfo{sel, imp, type};
+    };
+
+    static const methodInfo methods[] = {
+        make(@selector(addObserver:forKeyPath:options:context:), [](SEL sel, IMP superImp) {
+            auto superFn = (void (*)(id, SEL, id, NSString *, NSKeyValueObservingOptions, void *))superImp;
+            return ^(RLMObjectBase *self, id observer, NSString *keyPath, NSKeyValueObservingOptions options, void *context) {
+                if (!self->_standaloneObservers)
+                    self->_standaloneObservers = [NSMutableArray new];
+
+                RLMObservationInfo *info = [RLMObservationInfo new];
+                info.observer = observer;
+                info.options = options;
+                info.context = context;
+                info.key = keyPath;
+                [self->_standaloneObservers addObject:info];
+                superFn(self, sel, observer, keyPath, options, context);
+            };
+        }),
+
+        make(@selector(removeObserver:forKeyPath:), [](SEL sel, IMP superImp) {
+            auto superFn = (void (*)(id, SEL, id, NSString *))superImp;
+            return ^(RLMObjectBase *self, id observer, NSString *keyPath) {
+                for (RLMObservationInfo *info in self->_standaloneObservers) {
+                    if (info.observer == observer && [info.key isEqualToString:keyPath]) {
+                        [self->_standaloneObservers removeObject:info];
+                        break;
+                    }
+                }
+                superFn(self, sel, observer, keyPath);
+            };
+        }),
+
+        make(@selector(removeObserver:forKeyPath:context:), [](SEL sel, IMP superImp) {
+            auto superFn = (void (*)(id, SEL, id, NSString *, void *))superImp;
+            return ^(RLMObjectBase *self, id observer, NSString *keyPath, void *context) {
+                for (RLMObservationInfo *info in self->_standaloneObservers) {
+                    if (info.observer == observer && info.context == context && [info.key isEqualToString:keyPath]) {
+                        [self->_standaloneObservers removeObject:info];
+                        break;
+                    }
+                }
+                superFn(self, sel, observer, keyPath, context);
+            };
+        })
+    };
+
+    for (auto const& m : methods)
+        class_addMethod(cls, m.sel, m.imp, m.type);
+}
+
+void RLMInvalidateObject(RLMObjectBase *obj, dispatch_block_t block) {
+    auto &observers = obj->_objectSchema->_observers;
+    auto it = observers.begin(), end = observers.end();
+    for (; it != end; ++it) {
+        if ((*it)->_row.get_index() == obj->_row.get_index()) {
+            break;
+        }
+    }
+
+    struct backlink {
+        NSString *property;
+        RLMPropertyType type;
+        NSUInteger index;
+        id object;
+    };
+    std::vector<backlink> backlinks;
+
+    for (auto& bl : obj->_objectSchema->_observedBacklinks) {
+        auto table = bl.observable->_row.get_table();
+        if (table->get_column_type(bl.column) == realm::type_Link) {
+            if (table->get_link(bl.column, bl.observable->_row.get_index()) == obj->_row.get_index())
+                backlinks.push_back({bl.propertyName, RLMPropertyTypeObject, 0, bl.observable});
+        }
+        else {
+            auto ndx = table->get_linklist(bl.column, bl.observable->_row.get_index())->find(obj->_row.get_index());
+            if (ndx != realm::not_found)
+                backlinks.push_back({bl.propertyName, RLMPropertyTypeArray, ndx, bl.observable});
+        }
+    }
+
+    for (auto& b : backlinks) {
+        if (b.type == RLMPropertyTypeArray) {
+            [b.object willChange:NSKeyValueChangeRemoval valuesAtIndexes:[NSIndexSet indexSetWithIndex:b.index] forKey:b.property];
+        }
+        else {
+            [b.object willChangeValueForKey:b.property];
+        }
+    }
+
+    auto didChange = [&] {
+        for (auto& b : backlinks) {
+            if (b.type == RLMPropertyTypeArray) {
+                [b.object didChange:NSKeyValueChangeRemoval valuesAtIndexes:[NSIndexSet indexSetWithIndex:b.index] forKey:b.property];
+            }
+            else {
+                [b.object didChangeValueForKey:b.property];
+            }
+        }
+    };
+
+    if (it == end) {
+        block();
+        didChange();
+        return;
+    }
+
+    [*it willChangeValueForKey:@"invalidated"];
+    block();
+    [*it didChangeValueForKey:@"invalidated"];
+
+    didChange();
+
+    iter_swap(it, prev(observers.end()));
+    observers.pop_back();
+}
