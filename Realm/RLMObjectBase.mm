@@ -532,14 +532,20 @@ void RLMOverrideStandaloneMethods(Class cls) {
 }
 
 void RLMTrackDeletions(unretained<RLMRealm> realm, dispatch_block_t block) {
-    std::vector<std::pair<__unsafe_unretained RLMObservable*, __unsafe_unretained NSString *>> changes;
+    struct change {
+        __unsafe_unretained RLMObservable *observable;
+        __unsafe_unretained NSString *property;
+        NSIndexSet *indexes;
+    };
+    std::vector<change> changes;
+
     realm.group->notify_thing = [&](realm::ColumnBase::CascadeState const& cs) {
         for (auto const& row : cs.rows) {
             for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
                 if (objectSchema.table->get_index_in_group() == row.table_ndx) {
                     for (auto observer : objectSchema->_observers) {
                         if (observer->_row.get_index() == row.row_ndx) {
-                            changes.push_back({observer, @"invalidated"});
+                            changes.push_back({observer, @"invalidated", nil});
                             break;
                         }
                     }
@@ -551,7 +557,13 @@ void RLMTrackDeletions(unretained<RLMRealm> realm, dispatch_block_t block) {
                 if (objectSchema.table->get_index_in_group() == link.origin_table->get_index_in_group()) {
                     for (auto observer : objectSchema->_observers) {
                         if (observer->_row.get_index() == link.origin_row_ndx) {
-                            changes.push_back({observer, [objectSchema.properties[link.origin_col_ndx] name]});
+                            RLMProperty *prop = objectSchema.properties[link.origin_col_ndx];
+                            if (prop.type != RLMPropertyTypeArray)
+                                changes.push_back({observer, [prop name], nil});
+                            else {
+                                auto linkview = observer->_row.get_linklist(prop.column);
+                                changes.push_back({observer, [prop name], [NSIndexSet indexSetWithIndex:linkview->find(link.origin_row_ndx)]});
+                            }
                             break;
                         }
                     }
@@ -559,15 +571,21 @@ void RLMTrackDeletions(unretained<RLMRealm> realm, dispatch_block_t block) {
             }
         }
 
-        for (auto observable : changes) {
-            [observable.first willChangeValueForKey:observable.second];
+        for (auto const& change : changes) {
+            if (change.indexes)
+                [change.observable willChange:NSKeyValueChangeRemoval valuesAtIndexes:change.indexes forKey:change.property];
+            else
+                [change.observable willChangeValueForKey:change.property];
         }
     };
 
     block();
 
-    for (auto observable : changes) {
-        [observable.first didChangeValueForKey:observable.second];
+    for (auto const& change : changes) {
+        if (change.indexes)
+            [change.observable didChange:NSKeyValueChangeRemoval valuesAtIndexes:change.indexes forKey:change.property];
+        else
+            [change.observable didChangeValueForKey:change.property];
     }
 
     realm.group->notify_thing = nullptr;

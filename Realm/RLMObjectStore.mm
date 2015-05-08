@@ -566,9 +566,15 @@ void RLMDeleteObjectFromRealm(RLMObjectBase *object, RLMRealm *realm) {
 }
 
 void RLMClearTable(RLMObjectSchema *objectSchema) {
+    for (auto observer : objectSchema->_observers)
+        [observer willChangeValueForKey:@"invalidated"];
+
     RLMTrackDeletions(objectSchema.realm, ^{
         objectSchema.table->clear();
     });
+
+    for (auto observer : objectSchema->_observers)
+        [observer didChangeValueForKey:@"invalidated"];
 
     objectSchema->_observers.clear();
 }
