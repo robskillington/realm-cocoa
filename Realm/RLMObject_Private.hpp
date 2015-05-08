@@ -47,4 +47,4 @@ void RLMDidChange(RLMObjectBase *obj, NSString *key);
 void RLMWillChange(RLMObjectBase *obj, NSString *key, NSKeyValueChange kind, NSIndexSet *indices);
 void RLMDidChange(RLMObjectBase *obj, NSString *key, NSKeyValueChange kind, NSIndexSet *indices);
 
-void RLMInvalidateObject(RLMObjectBase *obj, dispatch_block_t block);
+void RLMTrackDeletions(RLMRealm *realm, dispatch_block_t block);

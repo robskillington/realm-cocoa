@@ -270,44 +270,6 @@ static RLMObservable *getObservable(RLMObjectBase *obj) {
     return observable;
 }
 
-static void registerBacklinkObserver(RLMObjectBase *obj, RLMObservable *observable, NSString *key) {
-    RLMProperty *prop = obj->_objectSchema[key];
-    if (!prop)
-        return;
-    if (prop.type != RLMPropertyTypeArray && prop.type != RLMPropertyTypeObject)
-        return;
-
-    RLMObjectSchema *dest = obj->_realm.schema[prop.objectClassName];
-    for (auto& backlink : dest->_observedBacklinks) {
-        if (backlink.observable == observable) {
-            ++backlink.refCount;
-            return;
-        }
-    }
-
-    dest->_observedBacklinks.push_back({observable, prop.name, prop.column});
-}
-
-static void unregisterBacklinkObserver(RLMObjectBase *obj, RLMObservable *observable, NSString *key) {
-    RLMProperty *prop = obj->_objectSchema[key];
-    if (!prop)
-        return;
-    if (prop.type != RLMPropertyTypeArray && prop.type != RLMPropertyTypeObject)
-        return;
-
-    RLMObjectSchema *dest = obj->_objectSchema.realm.schema[prop.objectClassName];
-    for (auto it = dest->_observedBacklinks.begin(), end = dest->_observedBacklinks.end(); it != end; ++it) {
-        if (it->observable == observable) {
-            --it->refCount;
-            if (it->refCount == 0) {
-                iter_swap(it, prev(dest->_observedBacklinks.end()));
-                dest->_observedBacklinks.pop_back();
-            }
-            return;
-        }
-    }
-}
-
 - (void)addObserver:(id)observer
          forKeyPath:(NSString *)keyPath
             options:(NSKeyValueObservingOptions)options
@@ -319,7 +281,6 @@ static void unregisterBacklinkObserver(RLMObjectBase *obj, RLMObservable *observ
     }
 
     RLMObservable *observable = getObservable(self);
-    registerBacklinkObserver(self, observable, key);
     [observable addObserver:observer forKeyPath:key options:options context:context];
 }
 
@@ -327,7 +288,6 @@ static void unregisterBacklinkObserver(RLMObjectBase *obj, RLMObservable *observ
     NSString *key = propertyKeyPath(keyPath, _objectSchema);
     if (key) {
         RLMObservable *observable = getObservable(self);
-        unregisterBacklinkObserver(self, observable, key);
         [observable removeObserver:observer forKeyPath:key];
     }
     else {
@@ -339,7 +299,6 @@ static void unregisterBacklinkObserver(RLMObjectBase *obj, RLMObservable *observ
     NSString *key = propertyKeyPath(keyPath, _objectSchema);
     if (key) {
         RLMObservable *observable = getObservable(self);
-        unregisterBacklinkObserver(self, observable, key);
         [observable removeObserver:observer forKeyPath:key context:context];
     }
     else {
@@ -572,68 +531,44 @@ void RLMOverrideStandaloneMethods(Class cls) {
         class_addMethod(cls, m.sel, m.imp, m.type);
 }
 
-void RLMInvalidateObject(RLMObjectBase *obj, dispatch_block_t block) {
-    auto &observers = obj->_objectSchema->_observers;
-    auto it = observers.begin(), end = observers.end();
-    for (; it != end; ++it) {
-        if ((*it)->_row.get_index() == obj->_row.get_index()) {
-            break;
-        }
-    }
-
-    struct backlink {
-        NSString *property;
-        RLMPropertyType type;
-        NSUInteger index;
-        id object;
-    };
-    std::vector<backlink> backlinks;
-
-    for (auto& bl : obj->_objectSchema->_observedBacklinks) {
-        auto table = bl.observable->_row.get_table();
-        if (table->get_column_type(bl.column) == realm::type_Link) {
-            if (table->get_link(bl.column, bl.observable->_row.get_index()) == obj->_row.get_index())
-                backlinks.push_back({bl.propertyName, RLMPropertyTypeObject, 0, bl.observable});
-        }
-        else {
-            auto ndx = table->get_linklist(bl.column, bl.observable->_row.get_index())->find(obj->_row.get_index());
-            if (ndx != realm::not_found)
-                backlinks.push_back({bl.propertyName, RLMPropertyTypeArray, ndx, bl.observable});
-        }
-    }
-
-    for (auto& b : backlinks) {
-        if (b.type == RLMPropertyTypeArray) {
-            [b.object willChange:NSKeyValueChangeRemoval valuesAtIndexes:[NSIndexSet indexSetWithIndex:b.index] forKey:b.property];
-        }
-        else {
-            [b.object willChangeValueForKey:b.property];
-        }
-    }
-
-    auto didChange = [&] {
-        for (auto& b : backlinks) {
-            if (b.type == RLMPropertyTypeArray) {
-                [b.object didChange:NSKeyValueChangeRemoval valuesAtIndexes:[NSIndexSet indexSetWithIndex:b.index] forKey:b.property];
+void RLMTrackDeletions(unretained<RLMRealm> realm, dispatch_block_t block) {
+    std::vector<std::pair<__unsafe_unretained RLMObservable*, __unsafe_unretained NSString *>> changes;
+    realm.group->notify_thing = [&](realm::ColumnBase::CascadeState const& cs) {
+        for (auto const& row : cs.rows) {
+            for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
+                if (objectSchema.table->get_index_in_group() == row.table_ndx) {
+                    for (auto observer : objectSchema->_observers) {
+                        if (observer->_row.get_index() == row.row_ndx) {
+                            changes.push_back({observer, @"invalidated"});
+                            break;
+                        }
+                    }
+                }
             }
-            else {
-                [b.object didChangeValueForKey:b.property];
+        }
+        for (auto const& link : cs.links) {
+            for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
+                if (objectSchema.table->get_index_in_group() == link.origin_table->get_index_in_group()) {
+                    for (auto observer : objectSchema->_observers) {
+                        if (observer->_row.get_index() == link.origin_row_ndx) {
+                            changes.push_back({observer, [objectSchema.properties[link.origin_col_ndx] name]});
+                            break;
+                        }
+                    }
+                }
             }
+        }
+
+        for (auto observable : changes) {
+            [observable.first willChangeValueForKey:observable.second];
         }
     };
 
-    if (it == end) {
-        block();
-        didChange();
-        return;
-    }
-
-    [*it willChangeValueForKey:@"invalidated"];
     block();
-    [*it didChangeValueForKey:@"invalidated"];
 
-    didChange();
+    for (auto observable : changes) {
+        [observable.first didChangeValueForKey:observable.second];
+    }
 
-    iter_swap(it, prev(observers.end()));
-    observers.pop_back();
+    realm.group->notify_thing = nullptr;
 }
