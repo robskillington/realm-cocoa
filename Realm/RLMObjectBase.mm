@@ -535,58 +535,73 @@ void RLMTrackDeletions(unretained<RLMRealm> realm, dispatch_block_t block) {
     struct change {
         __unsafe_unretained RLMObservable *observable;
         __unsafe_unretained NSString *property;
-        NSIndexSet *indexes;
     };
     std::vector<change> changes;
+    struct arrayChange {
+        __unsafe_unretained RLMObservable *observable;
+        __unsafe_unretained NSString *property;
+        NSMutableIndexSet *indexes;
+    };
+    std::vector<arrayChange> arrayChanges;
 
     realm.group->notify_thing = [&](realm::ColumnBase::CascadeState const& cs) {
         for (auto const& row : cs.rows) {
             for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
-                if (objectSchema.table->get_index_in_group() == row.table_ndx) {
-                    for (auto observer : objectSchema->_observers) {
-                        if (observer->_row.get_index() == row.row_ndx) {
-                            changes.push_back({observer, @"invalidated", nil});
-                            break;
-                        }
+                if (objectSchema.table->get_index_in_group() != row.table_ndx)
+                    continue;
+                for (auto observer : objectSchema->_observers) {
+                    if (observer->_row.get_index() == row.row_ndx) {
+                        changes.push_back({observer, @"invalidated"});
+                        break;
                     }
                 }
+                break;
             }
         }
         for (auto const& link : cs.links) {
             for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
-                if (objectSchema.table->get_index_in_group() == link.origin_table->get_index_in_group()) {
-                    for (auto observer : objectSchema->_observers) {
-                        if (observer->_row.get_index() == link.origin_row_ndx) {
-                            RLMProperty *prop = objectSchema.properties[link.origin_col_ndx];
-                            if (prop.type != RLMPropertyTypeArray)
-                                changes.push_back({observer, [prop name], nil});
-                            else {
-                                auto linkview = observer->_row.get_linklist(prop.column);
-                                changes.push_back({observer, [prop name], [NSIndexSet indexSetWithIndex:linkview->find(link.origin_row_ndx)]});
+                if (objectSchema.table->get_index_in_group() != link.origin_table->get_index_in_group())
+                    continue;
+                for (auto observer : objectSchema->_observers) {
+                    if (observer->_row.get_index() != link.origin_row_ndx)
+                        continue;
+                    RLMProperty *prop = objectSchema.properties[link.origin_col_ndx];
+                    NSString *name = prop.name;
+                    if (prop.type != RLMPropertyTypeArray)
+                        changes.push_back({observer, name});
+                    else {
+                        auto linkview = observer->_row.get_linklist(prop.column);
+                        arrayChange *c = nullptr;
+                        for (auto& ac : arrayChanges) {
+                            if (ac.observable == observer && ac.property == name) {
+                                c = &ac;
+                                break;
                             }
-                            break;
                         }
+                        if (!c) {
+                            arrayChanges.push_back({observer, name, [NSMutableIndexSet new]});
+                            c = &arrayChanges.back();
+                        }
+                        [c->indexes addIndex:linkview->find(link.origin_row_ndx)];
                     }
-                }
+                    break;
+               }
+                break;
             }
         }
 
-        for (auto const& change : changes) {
-            if (change.indexes)
-                [change.observable willChange:NSKeyValueChangeRemoval valuesAtIndexes:change.indexes forKey:change.property];
-            else
-                [change.observable willChangeValueForKey:change.property];
-        }
+        for (auto const& change : changes)
+            [change.observable willChangeValueForKey:change.property];
+        for (auto const& change : arrayChanges)
+            [change.observable willChange:NSKeyValueChangeRemoval valuesAtIndexes:change.indexes forKey:change.property];
     };
 
     block();
 
-    for (auto const& change : changes) {
-        if (change.indexes)
-            [change.observable didChange:NSKeyValueChangeRemoval valuesAtIndexes:change.indexes forKey:change.property];
-        else
-            [change.observable didChangeValueForKey:change.property];
-    }
+    for (auto const& change : changes)
+        [change.observable didChangeValueForKey:change.property];
+    for (auto const& change : arrayChanges)
+        [change.observable didChange:NSKeyValueChangeRemoval valuesAtIndexes:change.indexes forKey:change.property];
 
     realm.group->notify_thing = nullptr;
 }
