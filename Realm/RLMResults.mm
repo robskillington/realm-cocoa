@@ -432,8 +432,53 @@ static NSNumber *averageOfProperty(TableType const& table, RLMRealm *realm, NSSt
 - (void)deleteObjectsFromRealm {
     RLMResultsValidateInWriteTransaction(self);
 
+    std::vector<__unsafe_unretained RLMObservable*> invalidated;
+    std::vector<std::pair<__unsafe_unretained RLMObservable*, __unsafe_unretained NSString *>> nullified;
+    self.realm.group->notify_thing = [&](realm::ColumnBase::CascadeState const& cs) {
+        for (auto const& row : cs.rows) {
+            for (RLMObjectSchema *objectSchema in _realm.schema.objectSchema) {
+                if (objectSchema.table->get_index_in_group() == row.table_ndx) {
+                    for (auto observer : objectSchema->_observers) {
+                        if (observer->_row.get_index() == row.row_ndx) {
+                            invalidated.push_back(observer);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        for (auto const& link : cs.links) {
+            for (RLMObjectSchema *objectSchema in _realm.schema.objectSchema) {
+                if (objectSchema.table->get_index_in_group() == link.origin_table->get_index_in_group()) {
+                    for (auto observer : objectSchema->_observers) {
+                        if (observer->_row.get_index() == link.origin_row_ndx) {
+                            nullified.push_back({observer, [objectSchema.properties[link.origin_col_ndx] name]});
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        for (auto observable : invalidated) {
+            [observable willChangeValueForKey:@"invalidated"];
+        }
+        for (auto observable : nullified) {
+            [observable.first willChangeValueForKey:observable.second];
+        }
+    };
+
     // call clear to remove all from the realm
     _backingView.clear();
+
+    for (auto observable : invalidated) {
+        [observable didChangeValueForKey:@"invalidated"];
+    }
+    for (auto observable : nullified) {
+        [observable.first didChangeValueForKey:observable.second];
+    }
+
+    self.realm.group->notify_thing = nullptr;
 }
 
 - (NSString *)description {

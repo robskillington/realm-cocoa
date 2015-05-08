@@ -811,6 +811,16 @@ public:
     // should not crash
 }
 
+- (void)testClearQuery {
+    KVOObject *obj = [self createObject];
+    KVORecorder r1(self, obj, @"boolCol");
+    KVORecorder r2(self, obj, @"invalidated");
+    [self.realm deleteObjects:[KVOObject objectsInRealm:self.realm where:@"TRUEPREDICATE"]];
+    AssertChanged(r2, 0U, @NO, @YES);
+    // should not crash
+}
+
+
 - (void)testClearLinkView {
     // TODO
 }
