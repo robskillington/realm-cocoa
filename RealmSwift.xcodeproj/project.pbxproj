@@ -579,7 +579,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [[ ! -d \"build/ios-dynamic/Realm.framework\" ]]; then\n  CONFIGURATION=$CONFIGURATION sh build.sh ios-dynamic\nfi\n";
+			shellScript = "#if [[ ! -d \"build/ios-dynamic/Realm.framework\" ]]; then\n#  CONFIGURATION=$CONFIGURATION sh build.sh ios-dynamic\n#fi\n";
 		};
 		295C17A41A7C55DA000E5F54 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
