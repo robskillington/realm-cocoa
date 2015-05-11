@@ -114,6 +114,7 @@
 		C0FE465C1A9BE7A6006E0539 /* ObjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FE465B1A9BE7A6006E0539 /* ObjectTests.swift */; };
 		C0FE465D1A9BE7A6006E0539 /* ObjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FE465B1A9BE7A6006E0539 /* ObjectTests.swift */; };
 		C0FE465E1A9BE7A6006E0539 /* ObjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FE465B1A9BE7A6006E0539 /* ObjectTests.swift */; };
+		D44D23AA1B004CF400987688 /* Realm.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D44D23A91B004CF400987688 /* Realm.framework */; };
 		E8DF38121AF7187700BC914F /* strip-frameworks.sh in Copy Strip Frameworks Script */ = {isa = PBXBuildFile; fileRef = E8DF380F1AF7185B00BC914F /* strip-frameworks.sh */; };
 /* End PBXBuildFile section */
 
@@ -243,6 +244,7 @@
 		C0D8E1391A819B430077C784 /* RealmSwiftTests-BridgingHeader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "RealmSwiftTests-BridgingHeader.h"; path = "RealmSwift/Tests/RealmSwiftTests-BridgingHeader.h"; sourceTree = SOURCE_ROOT; };
 		C0E04FAB1AB2366200DCC8C0 /* TestHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TestHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0FE465B1A9BE7A6006E0539 /* ObjectTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ObjectTests.swift; path = RealmSwift/Tests/ObjectTests.swift; sourceTree = SOURCE_ROOT; };
+		D44D23A91B004CF400987688 /* Realm.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Realm.framework; path = "build/Release-iphoneos/Realm.framework"; sourceTree = "<group>"; };
 		E8DF380F1AF7185B00BC914F /* strip-frameworks.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = "strip-frameworks.sh"; path = "scripts/strip-frameworks.sh"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -267,6 +269,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D44D23AA1B004CF400987688 /* Realm.framework in Frameworks */,
 				023B19F81A423BD20067FB81 /* libc++.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -309,6 +312,7 @@
 		554A51CF3FAED0A637EBFEBF = {
 			isa = PBXGroup;
 			children = (
+				D44D23A91B004CF400987688 /* Realm.framework */,
 				554A51D23FAED0A637EBFEBF /* Products */,
 				554A51D33FAED0A637EBFEBF /* RealmSwift */,
 				554A51D53FAED0A637EBFEBF /* Tests */,
@@ -893,7 +897,10 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				FRAMEWORK_SEARCH_PATHS = "build/ios-dynamic";
+				FRAMEWORK_SEARCH_PATHS = (
+					"build/ios-dynamic",
+					"$(PROJECT_DIR)/build/Release-iphoneos",
+				);
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				INFOPLIST_FILE = "RealmSwift/RealmSwift-Info.plist";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -920,7 +927,10 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				FRAMEWORK_SEARCH_PATHS = "build/ios-dynamic";
+				FRAMEWORK_SEARCH_PATHS = (
+					"build/ios-dynamic",
+					"$(PROJECT_DIR)/build/Release-iphoneos",
+				);
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				INFOPLIST_FILE = "RealmSwift/RealmSwift-Info.plist";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
