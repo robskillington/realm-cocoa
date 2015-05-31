@@ -1039,6 +1039,9 @@
 				LastUpgradeCheck = 0610;
 				ORGANIZATIONNAME = Realm;
 				TargetAttributes = {
+					29E3C7041A71C1C700B62C1D = {
+						DevelopmentTeam = J25VAXDU23;
+					};
 					3F1A5E711992EB7400F45F4C = {
 						CreatedOnToolsVersion = 6.0;
 					};
@@ -1553,8 +1556,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer: Rob Skillington (TWU96UUD67)";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer: Rob Skillington (TWU96UUD67)";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				CONFIGURATION_TEMP_DIR = "$(PROJECT_TEMP_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				DEFINES_MODULE = YES;
@@ -1581,7 +1584,7 @@
 				OTHER_LDFLAGS = "-lrealm-ios-dbg";
 				OTHER_LIBTOOLFLAGS = "-lrealm-ios-dbg";
 				PRODUCT_NAME = Realm;
-				PROVISIONING_PROFILE = "2a009c71-7bdc-4599-98c0-a362881f38e1";
+				PROVISIONING_PROFILE = "";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1592,8 +1595,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer: Rob Skillington (TWU96UUD67)";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer: Rob Skillington (TWU96UUD67)";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				CONFIGURATION_TEMP_DIR = "$(PROJECT_TEMP_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				DEFINES_MODULE = YES;
@@ -1616,7 +1619,7 @@
 				OTHER_LDFLAGS = "-lrealm-ios";
 				OTHER_LIBTOOLFLAGS = "-lrealm-ios";
 				PRODUCT_NAME = Realm;
-				PROVISIONING_PROFILE = "2a009c71-7bdc-4599-98c0-a362881f38e1";
+				PROVISIONING_PROFILE = "";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
