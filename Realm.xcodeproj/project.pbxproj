@@ -1556,8 +1556,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "iPhone Developer: Rob Skillington (55JSQDFCT7)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer: Rob Skillington (55JSQDFCT7)";
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				CONFIGURATION_TEMP_DIR = "$(PROJECT_TEMP_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				DEFINES_MODULE = YES;
@@ -1581,10 +1581,13 @@
 				MACH_O_TYPE = mh_dylib;
 				METAL_ENABLE_DEBUG_INFO = YES;
 				MODULEMAP_FILE = Realm/module.modulemap;
-				OTHER_LDFLAGS = "-lrealm-ios-dbg";
+				OTHER_LDFLAGS = (
+					"-lrealm-ios-dbg",
+					"-headerpad_max_install_names",
+				);
 				OTHER_LIBTOOLFLAGS = "-lrealm-ios-dbg";
 				PRODUCT_NAME = Realm;
-				PROVISIONING_PROFILE = "";
+				PROVISIONING_PROFILE = "970cc192-829d-47bc-9f32-78fe0a95b62e";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1595,8 +1598,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "iPhone Developer: Rob Skillington (55JSQDFCT7)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer: Rob Skillington (55JSQDFCT7)";
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				CONFIGURATION_TEMP_DIR = "$(PROJECT_TEMP_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
 				DEFINES_MODULE = YES;
@@ -1616,10 +1619,13 @@
 				MACH_O_TYPE = mh_dylib;
 				METAL_ENABLE_DEBUG_INFO = NO;
 				MODULEMAP_FILE = Realm/module.modulemap;
-				OTHER_LDFLAGS = "-lrealm-ios";
+				OTHER_LDFLAGS = (
+					"-lrealm-ios",
+					"-headerpad_max_install_names",
+				);
 				OTHER_LIBTOOLFLAGS = "-lrealm-ios";
 				PRODUCT_NAME = Realm;
-				PROVISIONING_PROFILE = "";
+				PROVISIONING_PROFILE = "970cc192-829d-47bc-9f32-78fe0a95b62e";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1730,7 +1736,7 @@
 				OTHER_LDFLAGS = "-lrealm-ios-dbg";
 				OTHER_LIBTOOLFLAGS = "-lrealm-ios-dbg";
 				PRODUCT_NAME = Realm;
-				PROVISIONING_PROFILE = "2a009c71-7bdc-4599-98c0-a362881f38e1";
+				PROVISIONING_PROFILE = "970cc192-829d-47bc-9f32-78fe0a95b62e";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1762,7 +1768,7 @@
 				OTHER_LDFLAGS = "-lrealm-ios";
 				OTHER_LIBTOOLFLAGS = "-lrealm-ios";
 				PRODUCT_NAME = Realm;
-				PROVISIONING_PROFILE = "2a009c71-7bdc-4599-98c0-a362881f38e1";
+				PROVISIONING_PROFILE = "970cc192-829d-47bc-9f32-78fe0a95b62e";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
